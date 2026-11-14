@@ -319,7 +319,8 @@
     ctx.clearRect(0, 0, W, H);
     const list = d.strokes || [];
     // 塗りつぶし:決まった大きさの下書きで計算(結果は覚えておき、絵が変わった時だけ計算し直す)
-    const FW = FILL_W, FH = Math.max(1, Math.round(FILL_W * H / W));
+    // 縦横比はボードの枠の比率(d.aspect)を使う。画面ごとの丸めの違いで塗れる範囲が変わらないように
+    const FW = FILL_W, FH = Math.max(1, Math.round(FILL_W / (Number(d.aspect) > 0 ? Number(d.aspect) : W / H)));
     const fkey = FW + 'x' + FH + ':' + (d.rev || 0) + ':' + list.length;
     let masks = canvas._kfMasks;
     if (list.some(s => s.t === 'fill') && (!masks || masks.key !== fkey)) {
