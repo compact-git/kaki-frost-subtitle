@@ -43,7 +43,7 @@
 @keyframes kfPop{0%{opacity:0;transform:translateY(.6em) scale(.6)}15%{opacity:1;transform:translateY(0) scale(1.15)}75%{opacity:1}100%{opacity:0;transform:translateY(-.8em)}}
 .kf-bump{animation:kfBump .5s ease-out}
 @keyframes kfBump{30%{transform:scale(1.18)}}
-.kf-list{display:grid;grid-template-columns:auto 1fr auto;gap:.05em .45em;font-size:.62em;align-items:baseline;min-width:8em;width:100%}
+.kf-list{display:grid;grid-template-columns:auto minmax(3em,1fr) auto;gap:.05em .45em;font-size:.62em;align-items:baseline;min-width:8em;width:100%}
 .kf-list .r{text-align:center}.kf-list .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}.kf-list .v{text-align:right;font-variant-numeric:tabular-nums}
 .kf-list .v small{font-size:.7em;margin-left:.1em}
 .kf-q{display:flex;flex-direction:column;align-items:inherit;gap:.1em}
@@ -61,6 +61,10 @@
 .kf-box.sh-tag .kf-in{flex-direction:row;align-items:stretch!important;gap:0;padding:0;background:var(--bg);border-radius:.25em;overflow:hidden}
 .kf-box.sh-tag .kf-lbl{background:var(--acs);color:var(--tagc);display:flex;align-items:center;padding:.25em .55em;font-size:.45em;text-shadow:none}
 .kf-box.sh-tag .kf-body{padding:.08em .5em;display:flex;flex-direction:column;justify-content:center}
+.kf-box.sh-tag.kf-col .kf-in{flex-direction:column;align-items:stretch!important;width:100%}
+.kf-box.sh-tag.kf-col .kf-lbl{justify-content:center;padding:.18em .5em}
+.kf-box.sh-tag.kf-col .kf-body{padding:.12em .5em .2em}
+.kf-box.kf-col .kf-in{width:100%;box-sizing:border-box}
 .kf-box.sh-under .kf-val,.kf-box.sh-under .kf-q .big{border-bottom:.1em solid var(--acs);padding-bottom:.02em}
 .kf-box.sh-digital .kf-in{background:var(--bg);border:3px solid rgba(255,255,255,.18);border-radius:.18em;box-shadow:inset 0 0 .5em rgba(0,0,0,.6)}
 .kf-box.sh-digital .kf-val{letter-spacing:.06em}
@@ -187,7 +191,27 @@
     return BOARD_BG[d.bg] || 'transparent';
   }
   /** ストローク: {c:色, w:太さ(横幅の1/1000単位), e:消しゴム(1), p:[x,y,筆圧(0-100), ...] (x,yは0-10000)} */
+  /** 文字: {t:1, x,y(左上 0-10000), z:大きさ(横幅の1/1000), c:色, f:フォント, b:太字, o:縁取りの色, text} */
+  function textFont(s, W) { return `${s.b ? 800 : 500} ${Math.max(1, (Number(s.z) || 40) / 1000 * W)}px "${s.f || 'M PLUS Rounded 1c'}", "M PLUS Rounded 1c", sans-serif`; }
+  function textRect(ctx, s, W, H) {
+    ctx.save(); ctx.font = textFont(s, W);
+    const px = (Number(s.z) || 40) / 1000 * W, lines = String(s.text || '').split('\n');
+    const w = Math.max(...lines.map(l => ctx.measureText(l).width), px * 0.5);
+    ctx.restore();
+    return { x: s.x / 10000 * W, y: s.y / 10000 * H, w, h: lines.length * px * 1.25, px, lines };
+  }
+  function drawText(ctx, s, W, H) {
+    const r = textRect(ctx, s, W, H);
+    ctx.save(); ctx.font = textFont(s, W); ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
+    r.lines.forEach((ln, i) => {
+      const y = r.y + i * r.px * 1.25 + r.px * 0.1;
+      if (s.o) { ctx.strokeStyle = s.o; ctx.lineWidth = Math.max(2, r.px * 0.16); ctx.strokeText(ln, r.x, y); }
+      ctx.fillStyle = s.c || '#2b1d4a'; ctx.fillText(ln, r.x, y);
+    });
+    ctx.restore();
+  }
   function drawStroke(ctx, s, W, H) {
+    if (s.t) { drawText(ctx, s, W, H); return; }
     const p = s.p || []; if (p.length < 3) return;
     const base = (Number(s.w) || 6) / 1000 * W;
     ctx.save();
@@ -224,6 +248,12 @@
     ctx.clearRect(0, 0, W, H);
     for (const s of d.strokes || []) drawStroke(ctx, s, W, H);
     if (d.live) drawStroke(ctx, d.live, W, H);
+    // 文字のフォントが読み込まれる前に描いた時は、読み込み後に描き直す
+    const fonts = canvas.ownerDocument.fonts;
+    if (fonts && fonts.status !== 'loaded' && (d.strokes || []).some(s => s.t) && !canvas._kfFontWait) {
+      canvas._kfFontWait = true;
+      fonts.ready.then(() => { canvas._kfFontWait = false; drawBoard(canvas, d, true); });
+    }
   }
 
   /**
@@ -244,7 +274,7 @@
       const c = b.cfg;
       let d = b.d || {};
       if (opts.edit && isEmpty(id, d)) d = Object.assign({}, SAMPLE[id], id === 'board' ? { bg: d.bg, bgColor: d.bgColor } : {});
-      el.className = `kf-box sh-${c.shape || 'plain'} ah-${c.align || 'center'} av-${c.valign || 'middle'}` + (visible ? '' : ' off') + (opts.sel === id ? ' sel' : '');
+      el.className = `kf-box sh-${c.shape || 'plain'} ah-${c.align || 'center'} av-${c.valign || 'middle'}` + (id === 'crank' || id === 'qrank' ? ' kf-col' : '') + (visible ? '' : ' off') + (opts.sel === id ? ' sel' : '');
       const fontFam = `"${c.font}", "M PLUS Rounded 1c", sans-serif`;
       const glow = c.shape === 'neon' ? `0 0 .25em ${hexA(c.accent, 1)}` : '';
       const ol = outline(c.stroke, c.strokeW);
@@ -293,8 +323,26 @@
         }
       }
       editDeco(doc, el, id, opts);
+      el._kfSize = c.size; el._kfFit = c.autoFit !== false;
+      fitBox(el);
     }
     tick(stage);
+  }
+  /** 中身が枠からはみ出す時は、文字を小さくして枠に収める */
+  function fitBox(el) {
+    const inn = el.querySelector(':scope>.kf-in');
+    const base = Number(el._kfSize) || 40;
+    if (el.style.fontSize !== base + 'px') el.style.fontSize = base + 'px';
+    if (!inn || !el._kfFit) return;
+    const bw = el.clientWidth, bh = el.clientHeight;
+    if (!bw || !bh) return;
+    for (let i = 0; i < 4; i++) {
+      const w = Math.max(inn.scrollWidth, inn.offsetWidth), h = Math.max(inn.scrollHeight, inn.offsetHeight);
+      const k = Math.min(1, bw / w, bh / h);
+      if (k >= 0.995) break;
+      const cur = parseFloat(el.style.fontSize) || base;
+      el.style.fontSize = Math.max(6, Math.floor(cur * k * 0.98 * 10) / 10) + 'px';
+    }
   }
   function editDeco(doc, el, id, opts) {
     el.querySelectorAll(':scope>.kf-tag,:scope>.kf-rs').forEach(x => x.remove());
@@ -319,7 +367,11 @@
     stage.querySelectorAll('.kf-box[data-id=tmr] [data-tmr]').forEach(x => {
       const d = stage._kfTmr; if (!d) return;
       const t = fmtTime(tmrValue(d, now), d);
-      if (x.textContent !== t) x.textContent = t;
+      if (x.textContent !== t) {
+        const relen = x.textContent.length !== t.length;
+        x.textContent = t;
+        if (relen) { const box = x.closest('.kf-box'); if (box) fitBox(box); }
+      }
     });
     stage.querySelectorAll('[data-qdl]').forEach(x => {
       const left = Math.max(0, Math.ceil((Number(x.dataset.qdl) - now) / 1000));
@@ -334,5 +386,5 @@
     render(stage, boxes, opts);
   }
 
-  root.KFR = { BOX_IDS, BOX_LABEL, SHAPES, CSS, render: renderAll, tick, hexA, fmtTime, tmrValue, drawStroke, drawBoard, boardBg };
+  root.KFR = { BOX_IDS, BOX_LABEL, SHAPES, CSS, render: renderAll, tick, hexA, fmtTime, tmrValue, drawStroke, drawBoard, boardBg, textRect, textFont };
 })(typeof window !== 'undefined' ? window : globalThis);

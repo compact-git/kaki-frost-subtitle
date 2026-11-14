@@ -1,32 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a7bd5"/><stop offset="1" stop-color="#1b1036"/></linearGradient>
     <linearGradient id="face" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cfefff"/></linearGradient>
-    <radialGradient id="frostTL" cx="0" cy="0" r="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".28"/><stop offset=".45" stop-color="#ffffff" stop-opacity=".06"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
-    <radialGradient id="frostBR" cx="1" cy="1" r="1"><stop offset="0" stop-color="#bfe6ff" stop-opacity=".22"/><stop offset=".5" stop-color="#bfe6ff" stop-opacity=".04"/><stop offset="1" stop-color="#bfe6ff" stop-opacity="0"/></radialGradient>
+    
+    <linearGradient id="bgc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset=".45" stop-color="#ff9a3d"/><stop offset="1" stop-color="#d9480f"/></linearGradient>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d7f3ff"/></linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6f8ff"/><stop offset="1" stop-color="#a9def0"/></linearGradient>
     <g id="flake" stroke="#ffffff" stroke-linecap="round" fill="none">
       <path d="M0-20V20M-17-10L17 10M-17 10L17-10" stroke-width="3.5"/>
       <path d="M0-20l-5-5M0-20l5-5M0 20l-5 5M0 20l5 5M-17-10l-7 0M-17-10l-3-6M17 10l7 0M17 10l3 6M-17 10l-7 0M-17 10l-3 6M17-10l7 0M17-10l3-6" stroke-width="2.5"/>
     </g>
     <clipPath id="clip"><rect width="512" height="512" rx="112"/></clipPath>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <!-- ほんのりフロスト -->
-  <g clip-path="url(#clip)">
-    <rect width="512" height="512" fill="url(#frostTL)"/>
-    <rect width="512" height="512" fill="url(#frostBR)"/>
-    <use href="#flake" transform="translate(52 470) scale(1.3)" opacity=".16"/>
-    <use href="#flake" transform="translate(468 300) scale(.9)" opacity=".14"/>
-    <use href="#flake" transform="translate(300 42) scale(.7)" opacity=".13"/>
-    <use href="#flake" transform="translate(40 90) scale(.8)" opacity=".15"/>
-    <use href="#flake" transform="translate(470 470) scale(.6)" opacity=".12"/>
-    <g fill="#ffffff">
-      <circle cx="96" cy="40" r="3" opacity=".25"/><circle cx="210" cy="30" r="2.5" opacity=".2"/><circle cx="30" cy="250" r="3" opacity=".2"/>
-      <circle cx="140" cy="480" r="2.5" opacity=".22"/><circle cx="380" cy="490" r="3" opacity=".18"/><circle cx="492" cy="210" r="2.5" opacity=".2"/>
-    </g>
-    <path d="M0 400q40-10 60 20t70 10" fill="none" stroke="#ffffff" stroke-width="3" opacity=".10"/>
-    <path d="M512 120q-40 6-58-16t-66-12" fill="none" stroke="#ffffff" stroke-width="3" opacity=".10"/>
-  </g>
+  <rect width="512" height="512" rx="112" fill="url(#bgc)"/>
+  <g clip-path="url(#clip)"><use href="#flake" transform="translate(56 70) scale(.9)" opacity=".25"/><use href="#flake" transform="translate(470 250) scale(.7)" opacity=".2"/><use href="#flake" transform="translate(52 300) scale(.6)" opacity=".18"/></g>
+  <g transform="translate(0 -36)">
+  <ellipse cx="256" cy="438" rx="212" ry="44" fill="#0b4a5c" opacity=".3"/>
+  <ellipse cx="256" cy="414" rx="222" ry="58" fill="url(#plate)" stroke="#2b1d4a" stroke-width="12"/>
+  <ellipse cx="256" cy="408" rx="160" ry="34" fill="none" stroke="#9ad8ee" stroke-width="6"/>
+  <ellipse cx="236" cy="418" rx="118" ry="20" fill="#c2410c" opacity=".18"/>
+  <g transform="translate(74 84) scale(.8)">
   <!-- フリップ(書いた線) -->
   <g transform="translate(306 48) rotate(6 84 60)">
     <rect x="0" y="0" width="168" height="120" rx="18" fill="#ffffff" stroke="#2b1d4a" stroke-width="10"/>
@@ -60,4 +52,11 @@
     <path d="M-24 -164q10 14 26 12" fill="none" stroke="#2b1d4a" stroke-width="7" stroke-linecap="round"/>
   </g>
   <path d="M132 470q24-14 44 0t40-2" fill="none" stroke="#5bc0ff" stroke-width="9" stroke-linecap="round"/>
+</g>
+  <path d="M34 414a222 58 0 0 0 444 0" fill="none" stroke="#2b1d4a" stroke-width="12"/>
+  <path d="M46 418a210 50 0 0 0 420 0l0 0a210 40 0 0 1-420 0z" fill="url(#rim)"/>
+  <path d="M34 414a222 58 0 0 0 444 0" fill="none" stroke="#2b1d4a" stroke-width="12"/>
+  <rect x="120" y="452" width="272" height="42" rx="21" fill="#2b1d4a"/>
+  <text x="256" y="482" text-anchor="middle" font-family="M PLUS Rounded 1c,Noto Sans JP,sans-serif" font-weight="800" font-size="26" fill="#ffffff">表示</text>
+  </g>
 </svg>
