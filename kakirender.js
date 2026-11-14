@@ -210,12 +210,71 @@
     });
     ctx.restore();
   }
+  /** 図形: {t:'sh', k:'line'|'arrow'|'rect'|'ellipse', a:[x1,y1,x2,y2](0-10000), c:色, w:太さ, f:中を塗る(1)} */
+  function drawShape(ctx, s, W, H) {
+    const [x1, y1, x2, y2] = (s.a || [0, 0, 0, 0]).map((v, i) => v / 10000 * (i % 2 ? H : W));
+    const lw = Math.max(1, (Number(s.w) || 6) / 1000 * W);
+    ctx.save();
+    ctx.strokeStyle = s.c || '#000'; ctx.fillStyle = s.c || '#000'; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    if (s.k === 'rect') ctx.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+    else if (s.k === 'ellipse') ctx.ellipse((x1 + x2) / 2, (y1 + y2) / 2, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2, 0, 0, Math.PI * 2);
+    else { ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); }
+    if (s.f && (s.k === 'rect' || s.k === 'ellipse')) ctx.fill(); else ctx.stroke();
+    if (s.k === 'arrow') {
+      const ang = Math.atan2(y2 - y1, x2 - x1), L = Math.max(lw * 3.2, 14);
+      ctx.beginPath(); ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - L * Math.cos(ang - 0.45), y2 - L * Math.sin(ang - 0.45));
+      ctx.lineTo(x2 - L * Math.cos(ang + 0.45), y2 - L * Math.sin(ang + 0.45));
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+  /** 塗りつぶし: {t:'fill', x,y(0-10000), c:色} … その時点の絵の、つながった同じ色の部分を塗る */
+  function floodFill(ctx, s, W, H) {
+    const x0 = Math.min(W - 1, Math.max(0, Math.round(s.x / 10000 * W))), y0 = Math.min(H - 1, Math.max(0, Math.round(s.y / 10000 * H)));
+    const img = ctx.getImageData(0, 0, W, H), d = img.data;
+    const i0 = (y0 * W + x0) * 4;
+    const tr = d[i0], tg = d[i0 + 1], tb = d[i0 + 2], ta = d[i0 + 3];
+    const hx = String(s.c || '#000000').replace('#', ''), n = parseInt(hx, 16) || 0;
+    const fr = (n >> 16) & 255, fg = (n >> 8) & 255, fb = n & 255;
+    const tol = 90;
+    const same = i => {
+      const a = d[i + 3];
+      if (ta < 30) return a < 140;                       // 透明なところを塗る時は、うすい線のふちまで
+      return Math.abs(d[i] - tr) + Math.abs(d[i + 1] - tg) + Math.abs(d[i + 2] - tb) + Math.abs(a - ta) <= tol;
+    };
+    const mark = new Uint8Array(W * H);
+    const stack = [x0, y0];
+    while (stack.length) {
+      const y = stack.pop(); let x = stack.pop();
+      let p = y * W + x;
+      while (x > 0 && !mark[p - 1] && same((p - 1) * 4)) { x--; p--; }
+      let up = false, dn = false;
+      for (; x < W && !mark[p] && same(p * 4); x++, p++) {
+        mark[p] = 1;
+        if (y > 0) { const q = p - W; if (!mark[q] && same(q * 4)) { if (!up) { stack.push(x, y - 1); up = true; } } else up = false; }
+        if (y < H - 1) { const q = p + W; if (!mark[q] && same(q * 4)) { if (!dn) { stack.push(x, y + 1); dn = true; } } else dn = false; }
+      }
+    }
+    // すき間が出ないよう、塗った所を1ピクセル広げる
+    const grow = new Uint8Array(mark);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const p = y * W + x; if (!mark[p]) continue;
+      if (x > 0) grow[p - 1] = 1; if (x < W - 1) grow[p + 1] = 1; if (y > 0) grow[p - W] = 1; if (y < H - 1) grow[p + W] = 1;
+    }
+    for (let p = 0; p < W * H; p++) if (grow[p]) { const i = p * 4; d[i] = fr; d[i + 1] = fg; d[i + 2] = fb; d[i + 3] = 255; }
+    ctx.putImageData(img, 0, 0);
+  }
   function drawStroke(ctx, s, W, H) {
+    if (s.t === 'sh') { drawShape(ctx, s, W, H); return; }
+    if (s.t === 'fill') { floodFill(ctx, s, W, H); return; }
     if (s.t) { drawText(ctx, s, W, H); return; }
     const p = s.p || []; if (p.length < 3) return;
     const base = (Number(s.w) || 6) / 1000 * W;
     ctx.save();
     ctx.globalCompositeOperation = s.e ? 'destination-out' : 'source-over';
+    if (s.op && !s.e) ctx.globalAlpha = s.op;
     ctx.strokeStyle = s.e ? '#000' : (s.c || '#000'); ctx.fillStyle = ctx.strokeStyle;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const X = i => p[i] / 10000 * W, Y = i => p[i + 1] / 10000 * H;
@@ -240,7 +299,7 @@
     const r = canvas.getBoundingClientRect();
     const dpr = (canvas.ownerDocument.defaultView || window).devicePixelRatio || 1;
     const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
-    const key = (d.rev || 0) + ':' + W + 'x' + H + ':' + (d.strokes ? d.strokes.length : 0) + ':' + (d.live ? d.live.p.length : 0);
+    const key = (d.rev || 0) + ':' + W + 'x' + H + ':' + (d.strokes ? d.strokes.length : 0) + ':' + (d.live ? (d.live.p ? d.live.p.length : String(d.live.a)) : 0);
     if (!force && canvas._kfKey === key) return;
     canvas._kfKey = key;
     if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
@@ -250,7 +309,7 @@
     if (d.live) drawStroke(ctx, d.live, W, H);
     // 文字のフォントが読み込まれる前に描いた時は、読み込み後に描き直す
     const fonts = canvas.ownerDocument.fonts;
-    if (fonts && fonts.status !== 'loaded' && (d.strokes || []).some(s => s.t) && !canvas._kfFontWait) {
+    if (fonts && fonts.status !== 'loaded' && (d.strokes || []).some(s => s.t === 1) && !canvas._kfFontWait) {
       canvas._kfFontWait = true;
       fonts.ready.then(() => { canvas._kfFontWait = false; drawBoard(canvas, d, true); });
     }

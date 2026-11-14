@@ -2,7 +2,7 @@
   <defs>
     <linearGradient id="face" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cfefff"/></linearGradient>
     
-    <linearGradient id="bgc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset=".45" stop-color="#ff9a3d"/><stop offset="1" stop-color="#d9480f"/></linearGradient>
+    <linearGradient id="bgc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5eead4"/><stop offset=".45" stop-color="#22d3ee"/><stop offset="1" stop-color="#0e7490"/></linearGradient>
     <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d7f3ff"/></linearGradient>
     <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6f8ff"/><stop offset="1" stop-color="#a9def0"/></linearGradient>
     <g id="flake" stroke="#ffffff" stroke-linecap="round" fill="none">
@@ -17,7 +17,7 @@
   <ellipse cx="256" cy="438" rx="212" ry="44" fill="#0b4a5c" opacity=".3"/>
   <ellipse cx="256" cy="414" rx="222" ry="58" fill="url(#plate)" stroke="#2b1d4a" stroke-width="12"/>
   <ellipse cx="256" cy="408" rx="160" ry="34" fill="none" stroke="#9ad8ee" stroke-width="6"/>
-  <ellipse cx="236" cy="418" rx="118" ry="20" fill="#c2410c" opacity=".18"/>
+  <ellipse cx="236" cy="418" rx="118" ry="20" fill="#0e7490" opacity=".18"/>
   <g transform="translate(74 84) scale(.8)">
   <!-- フリップ(書いた線) -->
   <g transform="translate(306 48) rotate(6 84 60)">
