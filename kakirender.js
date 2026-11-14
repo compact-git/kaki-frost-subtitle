@@ -231,6 +231,11 @@
     ctx.restore();
   }
   /** 塗りつぶし: {t:'fill', x,y(0-10000), c:色} … その時点の絵の、つながった同じ色の部分を塗る */
+  /**
+   * 塗りつぶしは、どの画面(アプリ・小窓・OBS・補助exe)でも同じ結果になるよう、
+   * 決まった大きさ(横 FILL_W)の下書きで計算してから、表示の大きさに広げて描く。
+   */
+  const FILL_W = 1600;
   function floodFill(ctx, s, W, H) {
     const x0 = Math.min(W - 1, Math.max(0, Math.round(s.x / 10000 * W))), y0 = Math.min(H - 1, Math.max(0, Math.round(s.y / 10000 * H)));
     const img = ctx.getImageData(0, 0, W, H), d = img.data;
@@ -265,10 +270,17 @@
     }
     for (let p = 0; p < W * H; p++) if (grow[p]) { const i = p * 4; d[i] = fr; d[i + 1] = fg; d[i + 2] = fb; d[i + 3] = 255; }
     ctx.putImageData(img, 0, 0);
+    // 塗った部分だけの画像(表示用)
+    const doc = ctx.canvas.ownerDocument;
+    const mc = doc.createElement('canvas'); mc.width = W; mc.height = H;
+    const mctx = mc.getContext('2d'); const mi = mctx.createImageData(W, H), md = mi.data;
+    for (let p = 0; p < W * H; p++) if (grow[p]) { const i = p * 4; md[i] = fr; md[i + 1] = fg; md[i + 2] = fb; md[i + 3] = 255; }
+    mctx.putImageData(mi, 0, 0);
+    return mc;
   }
   function drawStroke(ctx, s, W, H) {
     if (s.t === 'sh') { drawShape(ctx, s, W, H); return; }
-    if (s.t === 'fill') { floodFill(ctx, s, W, H); return; }
+    if (s.t === 'fill') return;                                  // 塗りつぶしは drawBoard で描く
     if (s.t) { drawText(ctx, s, W, H); return; }
     const p = s.p || []; if (p.length < 3) return;
     const base = (Number(s.w) || 6) / 1000 * W;
@@ -305,7 +317,29 @@
     if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, W, H);
-    for (const s of d.strokes || []) drawStroke(ctx, s, W, H);
+    const list = d.strokes || [];
+    // 塗りつぶし:決まった大きさの下書きで計算(結果は覚えておき、絵が変わった時だけ計算し直す)
+    const FW = FILL_W, FH = Math.max(1, Math.round(FILL_W * H / W));
+    const fkey = FW + 'x' + FH + ':' + (d.rev || 0) + ':' + list.length;
+    let masks = canvas._kfMasks;
+    if (list.some(s => s.t === 'fill') && (!masks || masks.key !== fkey)) {
+      masks = { key: fkey, m: new Map() };
+      let off = canvas._kfOff;
+      if (!off) { off = canvas.ownerDocument.createElement('canvas'); canvas._kfOff = off; }
+      off.width = FW; off.height = FH;
+      const octx = off.getContext('2d', { willReadFrequently: true });
+      octx.clearRect(0, 0, FW, FH);
+      const last = list.map(s => s.t === 'fill').lastIndexOf(true);
+      for (let i = 0; i <= last; i++) {
+        const s = list[i];
+        if (s.t === 'fill') masks.m.set(i, floodFill(octx, s, FW, FH)); else drawStroke(octx, s, FW, FH);
+      }
+      canvas._kfMasks = masks;
+    }
+    list.forEach((s, i) => {
+      if (s.t === 'fill') { const mc = masks && masks.m.get(i); if (mc) { ctx.save(); ctx.imageSmoothingEnabled = true; ctx.drawImage(mc, 0, 0, W, H); ctx.restore(); } }
+      else drawStroke(ctx, s, W, H);
+    });
     if (d.live) drawStroke(ctx, d.live, W, H);
     // 文字のフォントが読み込まれる前に描いた時は、読み込み後に描き直す
     const fonts = canvas.ownerDocument.fonts;

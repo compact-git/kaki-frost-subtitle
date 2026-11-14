@@ -1,4 +1,4 @@
-/* Kaki Frost 表示(補助exe) v1.0.2
+/* Kaki Frost 表示(補助exe) v1.0.3
  * Kaki Frost Web から表示のデータ(タイマー・フォロワー・早押し・ボードなど)を受け取り(127.0.0.1 の WebSocket)、
  * 自分の画面に「枠なし・透明・最前面・クリックが通り抜ける」窓で表示する。
  */
@@ -10,6 +10,20 @@ const { WebSocketServer } = require('ws');
 
 const VERSION = app.getVersion();
 const SHORTCUT = 'Control+Alt+K';
+const PROTOCOL = 'kakifrost';   // Kaki Frost Web から kakifrost://start で起動できるようにする
+
+/**
+ * 自分の保存場所を Windows に登録する(HKEY_CURRENT_USER なので管理者の許可はいらない)。
+ * portable exe は起動のたびに一時フォルダへ展開されるので、本体の exe の場所(PORTABLE_EXECUTABLE_FILE)を登録する。
+ * exe を別の場所に移した時も、そこから一度起動すれば登録し直される。
+ */
+function registerProtocol() {
+  try {
+    if (process.defaultApp) app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1] || '.')]);
+    else app.setAsDefaultProtocolClient(PROTOCOL, process.env.PORTABLE_EXECUTABLE_FILE || process.execPath, []);
+  } catch (e) { console.error(e); }
+}
+const fromLink = argv => (argv || []).some(a => String(a).toLowerCase().startsWith(PROTOCOL + ':'));
 const DEFAULT_ORIGINS = ['https://kaki.rider.tokyo', 'https://*.pages.dev', 'http://localhost:*', 'http://127.0.0.1:*'];
 
 // ---------- 設定(ユーザーデータのフォルダに保存) ----------
@@ -138,9 +152,14 @@ function startServer() {
 // ---------- 起動 ----------
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 else {
-  app.on('second-instance', () => { setEditing(true); });
+  // すでに起動している時:アプリ(kakifrost://)からなら表示を出すだけ、手で起動し直したなら位置とサイズの調整
+  app.on('second-instance', (_e, argv) => {
+    if (fromLink(argv)) { if (win && cfg.visible !== false) win.showInactive(); return; }
+    setEditing(true);
+  });
   app.whenReady().then(() => {
     loadCfg();
+    registerProtocol();
     createWindow();
     tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'tray.png')));
     tray.on('click', () => tray.popUpContextMenu());
