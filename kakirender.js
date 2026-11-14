@@ -1,0 +1,338 @@
+/* Kaki Frost Web - 表示レンダラー(アプリ内プレビュー / 小窓 / OBS用ファイルで共通) */
+(function (root) {
+  'use strict';
+
+  const BOX_IDS = ['fol', 'tmr', 'cnt', 'crank', 'quiz', 'qrank', 'board'];
+  const BOX_LABEL = {
+    fol: 'フォロワー', tmr: '同時視聴タイマー', cnt: 'コメント数', crank: 'コメントランキング',
+    quiz: '早押し(出題・正解者)', qrank: '早押しランキング', board: 'ホワイトボード',
+  };
+  const SHAPES = [
+    ['plain', '文字だけ(縁取り)'], ['band', '帯(横いっぱい)'], ['card', 'カード(角丸の枠)'], ['pill', 'カプセル'],
+    ['neon', 'ネオン(光る枠)'], ['tag', 'ラベル付き(見出しが色付きの札)'], ['under', '下線'], ['digital', 'デジタル(液晶風)'],
+  ];
+  const MEDAL = ['🥇', '🥈', '🥉'];
+  const SRC_MARK = { twitch: '🟣', youtube: '🔴' };
+
+  const SAMPLE = {
+    fol: { rows: [{ src: 'twitch', n: 1234 }], label: 'FOLLOWERS', goal: 1500 },
+    tmr: { running: false, base: -5000, anchor: 0, fmt: 'auto', tenths: false, negStyle: 'clock', label: '同時視聴' },
+    cnt: { n: 2580, label: 'コメント数' },
+    crank: { label: 'コメントランキング', rows: [{ name: 'alice', val: 128, src: 'twitch' }, { name: 'bob', val: 96, src: 'twitch' }, { name: 'carol', val: 51, src: 'twitch' }] },
+    quiz: { state: 'result', title: '第1問', ans: '富士山', winners: [{ name: 'alice', pts: 10, src: 'twitch' }], label: '早押し' },
+    qrank: { label: '早押しランキング', rows: [{ name: 'alice', val: 30, src: 'twitch' }, { name: 'dave', val: 20, src: 'youtube' }, { name: 'bob', val: 10, src: 'twitch' }] },
+    board: { strokes: [{ c: '#ff5fa2', w: 12, e: 0, p: [1500, 6000, 50, 2500, 3500, 50, 3800, 6200, 50, 5200, 3000, 50, 6500, 6000, 50, 8200, 3600, 50] }], rev: 1, bg: 'white', bgColor: '#ffffff' },
+  };
+
+  const CSS = `
+.kf-stage{position:relative;width:100%;height:100%;overflow:hidden}
+.kf-box{position:absolute;box-sizing:border-box;display:flex;align-items:center;overflow:visible}
+.kf-box.ah-left{justify-content:flex-start}.kf-box.ah-center{justify-content:center}.kf-box.ah-right{justify-content:flex-end}
+.kf-box.av-top{align-items:flex-start}.kf-box.av-bottom{align-items:flex-end}
+.kf-in{box-sizing:border-box;max-width:100%;display:flex;flex-direction:column;gap:.08em;padding:.12em .55em;line-height:1.15;position:relative}
+.kf-box.ah-left .kf-in{align-items:flex-start}.kf-box.ah-center .kf-in{align-items:center}.kf-box.ah-right .kf-in{align-items:flex-end}
+.kf-in.lp-left{flex-direction:row;align-items:center!important;gap:.45em}
+.kf-lbl{font-size:.45em;letter-spacing:.06em;opacity:.95;white-space:nowrap}
+.kf-val{font-variant-numeric:tabular-nums;white-space:nowrap}
+.kf-sub{font-size:.42em;opacity:.9;white-space:nowrap}
+.kf-pair{display:flex;align-items:baseline;gap:.25em;white-space:nowrap}
+.kf-mark{font-size:.55em}
+.kf-goal{width:100%;min-width:6em;height:.22em;border-radius:.2em;background:rgba(255,255,255,.25);overflow:hidden;margin-top:.1em}
+.kf-goal i{display:block;height:100%;background:var(--ac2,#ffd23f);border-radius:.2em;transition:width .6s}
+.kf-pop{position:absolute;right:-.2em;top:-.6em;font-size:.55em;font-weight:800;color:#ffd23f;pointer-events:none;animation:kfPop 1.6s ease-out forwards}
+@keyframes kfPop{0%{opacity:0;transform:translateY(.6em) scale(.6)}15%{opacity:1;transform:translateY(0) scale(1.15)}75%{opacity:1}100%{opacity:0;transform:translateY(-.8em)}}
+.kf-bump{animation:kfBump .5s ease-out}
+@keyframes kfBump{30%{transform:scale(1.18)}}
+.kf-list{display:grid;grid-template-columns:auto 1fr auto;gap:.05em .45em;font-size:.62em;align-items:baseline;min-width:8em;width:100%}
+.kf-list .r{text-align:center}.kf-list .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}.kf-list .v{text-align:right;font-variant-numeric:tabular-nums}
+.kf-list .v small{font-size:.7em;margin-left:.1em}
+.kf-q{display:flex;flex-direction:column;align-items:inherit;gap:.1em}
+.kf-q .big{font-size:1em;white-space:nowrap}
+.kf-q .ans{font-size:.8em}
+.kf-q .live{animation:kfBlink 1s steps(2) infinite}
+@keyframes kfBlink{50%{opacity:.55}}
+.kf-q .win{font-size:.72em;white-space:nowrap}
+.kf-in.kf-anim{animation:kfIn .3s ease-out}
+@keyframes kfIn{from{opacity:0;transform:translateY(.3em) scale(.96)}}
+.kf-box.sh-band .kf-in{width:100%;background:var(--ac)}
+.kf-box.sh-card .kf-in{background:var(--bg);border:3px solid var(--ac);border-radius:.32em}
+.kf-box.sh-pill .kf-in{background:var(--ac);border-radius:999px;padding:.12em .95em}
+.kf-box.sh-neon .kf-in{background:var(--bg);border:3px solid var(--acs);border-radius:.3em;box-shadow:0 0 .35em var(--acs),inset 0 0 .3em var(--acs)}
+.kf-box.sh-tag .kf-in{flex-direction:row;align-items:stretch!important;gap:0;padding:0;background:var(--bg);border-radius:.25em;overflow:hidden}
+.kf-box.sh-tag .kf-lbl{background:var(--acs);color:var(--tagc);display:flex;align-items:center;padding:.25em .55em;font-size:.45em;text-shadow:none}
+.kf-box.sh-tag .kf-body{padding:.08em .5em;display:flex;flex-direction:column;justify-content:center}
+.kf-box.sh-under .kf-val,.kf-box.sh-under .kf-q .big{border-bottom:.1em solid var(--acs);padding-bottom:.02em}
+.kf-box.sh-digital .kf-in{background:var(--bg);border:3px solid rgba(255,255,255,.18);border-radius:.18em;box-shadow:inset 0 0 .5em rgba(0,0,0,.6)}
+.kf-box.sh-digital .kf-val{letter-spacing:.06em}
+.kf-board{position:absolute;inset:0;width:100%;height:100%;display:block}
+.kf-box[data-id=board]{overflow:hidden}
+.kf-edit .kf-box{--bx:#ffd23f;outline:3px dashed var(--bx);box-shadow:0 0 0 2px rgba(0,0,0,.5),inset 0 0 0 2px rgba(0,0,0,.5);cursor:move}
+.kf-edit .kf-box.sel{outline:4px solid var(--bx)}
+.kf-edit .kf-box .kf-tag{text-shadow:none;z-index:3;position:absolute;left:4px;top:2px;font:800 11px sans-serif;background:var(--bx);color:#2b1d4a;padding:1px 6px;border-radius:6px;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.5);letter-spacing:0}
+.kf-edit .kf-box .kf-rs{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;z-index:3;background:linear-gradient(135deg,transparent 50%,var(--bx) 50%)}
+.kf-edit .kf-box.off{opacity:.25}
+.kf-edit .kf-box[data-id=fol]{--bx:#9146ff}.kf-edit .kf-box[data-id=tmr]{--bx:#ffb020}.kf-edit .kf-box[data-id=cnt]{--bx:#5bc0ff}
+.kf-edit .kf-box[data-id=crank]{--bx:#2fe0b5}.kf-edit .kf-box[data-id=quiz]{--bx:#ff5fa2}.kf-edit .kf-box[data-id=qrank]{--bx:#ff8a3d}.kf-edit .kf-box[data-id=board]{--bx:#a3e635}
+`;
+
+  function hexA(hex, a) {
+    const h = String(hex || '#000000').replace('#', '');
+    const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16) || 0;
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a == null ? 1 : a})`;
+  }
+  function outline(color, w) {
+    w = Number(w) || 0;
+    if (w <= 0) return '';
+    const s = [];
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      s.push(`${(Math.cos(a) * w).toFixed(1)}px ${(Math.sin(a) * w).toFixed(1)}px 0 ${color}`);
+    }
+    return s.join(',');
+  }
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const num = n => (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('ja-JP');
+
+  // ---------- タイマー ----------
+  function tmrValue(d, now) {
+    if (!d) return 0;
+    return d.running ? d.base + ((now || Date.now()) - d.anchor) : d.base;
+  }
+  function fmtTime(ms, d) {
+    d = d || {};
+    const neg = ms < 0;
+    const a = Math.abs(ms);
+    let s = neg ? Math.ceil(a / 1000 - 1e-9) : Math.floor(a / 1000);
+    if (neg && s === 0) s = 0;
+    if (neg && d.negStyle === 'sec') return '-' + s;
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    const p2 = v => String(v).padStart(2, '0');
+    let t;
+    if (d.fmt === 'hms' || (d.fmt !== 'ms' && h > 0)) t = `${h}:${p2(m)}:${p2(sec)}`;
+    else if (d.fmt === 'ms') t = `${p2(Math.floor(s / 60))}:${p2(sec)}`;
+    else t = `${m}:${p2(sec)}`;
+    if (d.tenths && !neg) t += '.' + Math.floor((a % 1000) / 100);
+    return (neg ? '-' : '') + t;
+  }
+
+  // ---------- 中身 ----------
+  function labelHtml(c, text) {
+    if (!c.labelOn || !text) return '';
+    return `<span class="kf-lbl">${esc(text)}</span>`;
+  }
+  function wrap(c, lbl, body) {
+    if (c.shape === 'tag') return `${lbl}<span class="kf-body">${body}</span>`;
+    return lbl + body;
+  }
+  function content(id, c, d) {
+    const lbl = labelHtml(c, c.label);
+    if (id === 'fol') {
+      const rows = (d.rows || []).filter(r => r);
+      let body;
+      if (!rows.length) body = '<span class="kf-val">—</span>';
+      else if (rows.length === 1 || d.sum) {
+        const n = rows.reduce((a, r) => a + (Number(r.n) || 0), 0);
+        const mk = (c.showMark && rows.length === 1) ? `<span class="kf-mark">${SRC_MARK[rows[0].src] || ''}</span>` : '';
+        body = `<span class="kf-pair">${mk}<span class="kf-val" data-cnt="fol">${num(n)}</span></span>`;
+      } else {
+        body = rows.map(r => `<span class="kf-pair"><span class="kf-mark">${SRC_MARK[r.src] || ''}</span><span class="kf-val" data-cnt="fol-${r.src}">${num(r.n)}</span></span>`).join('');
+      }
+      if (d.goal > 0) {
+        const n = rows.reduce((a, r) => a + (Number(r.n) || 0), 0);
+        const pc = Math.max(0, Math.min(100, n / d.goal * 100));
+        body += `<span class="kf-sub">目標 ${num(d.goal)}</span><span class="kf-goal"><i style="width:${pc.toFixed(1)}%"></i></span>`;
+      }
+      return wrap(c, lbl, body);
+    }
+    if (id === 'tmr') {
+      return wrap(c, lbl, `<span class="kf-val" data-tmr="1">${esc(fmtTime(tmrValue(d), d))}</span>`);
+    }
+    if (id === 'cnt') {
+      return wrap(c, lbl, `<span class="kf-val" data-cnt="cnt">${num(d.n)}</span>`);
+    }
+    if (id === 'crank' || id === 'qrank') {
+      const rows = d.rows || [];
+      const unit = id === 'qrank' ? 'pt' : '';
+      const body = rows.length ? `<div class="kf-list">${rows.map((r, i) =>
+        `<span class="r">${MEDAL[i] || (i + 1) + '.'}</span><span class="n">${c.showMark && SRC_MARK[r.src] ? SRC_MARK[r.src] + ' ' : ''}${esc(r.name)}</span><span class="v">${num(r.val)}${unit ? '<small>' + unit + '</small>' : ''}</span>`).join('')}</div>`
+        : '<span class="kf-sub">まだいません</span>';
+      return wrap(c, lbl, body);
+    }
+    if (id === 'quiz') {
+      const st = d.state || 'idle';
+      if (st === 'idle') return '';
+      let body = '<div class="kf-q">';
+      if (st === 'open') {
+        body += `<span class="big live">${esc(d.title || '')} 受付中!</span>`;
+        if (d.deadline) body += `<span class="win" data-qdl="${Number(d.deadline)}"></span>`;
+      } else if (st === 'judging') {
+        body += `<span class="big">${esc(d.title || '')} 締め切り!</span><span class="win">判定中…</span>`;
+      } else {
+        body += `<span class="big">${esc(d.title || '')}${d.ans ? ' 正解:' + esc(d.ans) : ' 結果'}</span>`;
+        const w = d.winners || [];
+        if (!w.length) body += '<span class="win">正解者なし</span>';
+        w.forEach((x, i) => { body += `<span class="win">${MEDAL[i] || (i + 1) + '位'} ${c.showMark && SRC_MARK[x.src] ? SRC_MARK[x.src] + ' ' : ''}${esc(x.name)}${x.pts ? ` +${num(x.pts)}pt` : ''}</span>`; });
+      }
+      body += '</div>';
+      return wrap(c, lbl, body);
+    }
+    return '';
+  }
+
+  // ---------- ホワイトボード ----------
+  const BOARD_BG = { white: '#ffffff', black: '#1d2a24', green: '#1f5a3d', cream: '#fff8e7' };
+  function boardBg(d) {
+    if (!d || d.bg === 'none') return 'transparent';
+    if (d.bg === 'custom') return d.bgColor || '#ffffff';
+    return BOARD_BG[d.bg] || 'transparent';
+  }
+  /** ストローク: {c:色, w:太さ(横幅の1/1000単位), e:消しゴム(1), p:[x,y,筆圧(0-100), ...] (x,yは0-10000)} */
+  function drawStroke(ctx, s, W, H) {
+    const p = s.p || []; if (p.length < 3) return;
+    const base = (Number(s.w) || 6) / 1000 * W;
+    ctx.save();
+    ctx.globalCompositeOperation = s.e ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = s.e ? '#000' : (s.c || '#000'); ctx.fillStyle = ctx.strokeStyle;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const X = i => p[i] / 10000 * W, Y = i => p[i + 1] / 10000 * H;
+    const pw = i => s.pr ? base * (0.25 + 1.5 * (p[i + 2] / 100)) : base;
+    if (p.length === 3) { ctx.beginPath(); ctx.arc(X(0), Y(0), pw(0) / 2, 0, Math.PI * 2); ctx.fill(); ctx.restore(); return; }
+    if (!s.pr) {
+      ctx.lineWidth = base; ctx.beginPath(); ctx.moveTo(X(0), Y(0));
+      for (let i = 3; i < p.length - 3; i += 3) {
+        const mx = (X(i) + X(i + 3)) / 2, my = (Y(i) + Y(i + 3)) / 2;
+        ctx.quadraticCurveTo(X(i), Y(i), mx, my);
+      }
+      ctx.lineTo(X(p.length - 3), Y(p.length - 3)); ctx.stroke();
+    } else {
+      for (let i = 3; i < p.length; i += 3) {
+        ctx.lineWidth = (pw(i - 3) + pw(i)) / 2;
+        ctx.beginPath(); ctx.moveTo(X(i - 3), Y(i - 3)); ctx.lineTo(X(i), Y(i)); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+  function drawBoard(canvas, d, force) {
+    const r = canvas.getBoundingClientRect();
+    const dpr = (canvas.ownerDocument.defaultView || window).devicePixelRatio || 1;
+    const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
+    const key = (d.rev || 0) + ':' + W + 'x' + H + ':' + (d.strokes ? d.strokes.length : 0) + ':' + (d.live ? d.live.p.length : 0);
+    if (!force && canvas._kfKey === key) return;
+    canvas._kfKey = key;
+    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    for (const s of d.strokes || []) drawStroke(ctx, s, W, H);
+    if (d.live) drawStroke(ctx, d.live, W, H);
+  }
+
+  /**
+   * stage: 描画先 / boxes: {id:{cfg, d}} / opts: {edit, sel, onlyOutput:'pip'|'obs'}
+   */
+  function render(stage, boxes, opts) {
+    opts = opts || {};
+    const doc = stage.ownerDocument;
+    stage.classList.add('kf-stage');
+    stage.classList.toggle('kf-edit', !!opts.edit);
+    for (const id of BOX_IDS) {
+      const b = boxes[id];
+      let el = stage.querySelector(`.kf-box[data-id="${id}"]`);
+      const visible = b && b.cfg.on && (!opts.onlyOutput || (b.cfg.out && b.cfg.out[opts.onlyOutput]));
+      if (!visible && !opts.edit) { if (el) el.remove(); continue; }
+      if (!b) { if (el) el.remove(); continue; }
+      if (!el) { el = doc.createElement('div'); el.className = 'kf-box'; el.dataset.id = id; stage.appendChild(el); }
+      const c = b.cfg;
+      let d = b.d || {};
+      if (opts.edit && isEmpty(id, d)) d = Object.assign({}, SAMPLE[id], id === 'board' ? { bg: d.bg, bgColor: d.bgColor } : {});
+      el.className = `kf-box sh-${c.shape || 'plain'} ah-${c.align || 'center'} av-${c.valign || 'middle'}` + (visible ? '' : ' off') + (opts.sel === id ? ' sel' : '');
+      const fontFam = `"${c.font}", "M PLUS Rounded 1c", sans-serif`;
+      const glow = c.shape === 'neon' ? `0 0 .25em ${hexA(c.accent, 1)}` : '';
+      const ol = outline(c.stroke, c.strokeW);
+      Object.assign(el.style, {
+        left: c.x + '%', top: c.y + '%', width: c.w + '%', height: c.h + '%',
+        fontFamily: fontFam, fontSize: c.size + 'px', fontWeight: c.bold ? '800' : '500', color: c.color,
+        textShadow: [ol, glow].filter(Boolean).join(',') || 'none', textAlign: c.align || 'center',
+      });
+      el.style.setProperty('--ac', hexA(c.accent, c.accentA));
+      el.style.setProperty('--acs', hexA(c.accent, 1));
+      el.style.setProperty('--bg', hexA(c.bg, c.bgA));
+      el.style.setProperty('--tagc', c.tagColor || '#ffffff');
+      el.style.setProperty('--ac2', hexA(c.accent2 || '#ffd23f', 1));
+
+      if (id === 'board') {
+        let cv = el.querySelector('canvas.kf-board');
+        if (!cv) { el.innerHTML = ''; cv = doc.createElement('canvas'); cv.className = 'kf-board'; el.appendChild(cv); }
+        el.style.background = boardBg(d);
+        el.style.borderRadius = c.shape === 'card' ? '12px' : '0';
+        el.style.border = c.shape === 'card' ? `3px solid ${hexA(c.accent, 1)}` : 'none';
+        drawBoard(cv, d);
+        editDeco(doc, el, id, opts);
+        continue;
+      }
+      el.style.background = ''; el.style.border = ''; el.style.borderRadius = '';
+      const html = content(id, c, d);
+      const sig = id + '|' + c.shape + '|' + c.labelOn + '|' + c.labelPos + '|' + html.replace(/data-tmr="1">[^<]*</, 'data-tmr="1"><');
+      if (el._kfSig !== sig) {
+        const prevVals = {};
+        el.querySelectorAll('[data-cnt]').forEach(x => { prevVals[x.dataset.cnt] = Number(x.textContent.replace(/[^\d]/g, '')); });
+        const firstShow = !el._kfSig || (id === 'quiz' && el._kfState !== d.state);
+        el._kfSig = sig; el._kfState = d.state;
+        el.innerHTML = html ? `<div class="kf-in lp-${c.labelPos || 'top'}${firstShow && !opts.edit ? ' kf-anim' : ''}">${html}</div>` : '';
+        // 増えた時の演出(フォロワー・コメント数)
+        if (!opts.edit && c.fx !== false) {
+          el.querySelectorAll('[data-cnt]').forEach(x => {
+            const k = x.dataset.cnt, now = Number(x.textContent.replace(/[^\d]/g, ''));
+            if (prevVals[k] != null && !isNaN(prevVals[k]) && now > prevVals[k]) {
+              x.classList.add('kf-bump');
+              if (k.startsWith('fol')) {
+                const pop = doc.createElement('span'); pop.className = 'kf-pop'; pop.textContent = '+' + (now - prevVals[k]);
+                const host = el.querySelector('.kf-in'); if (host) host.appendChild(pop);
+              }
+            }
+          });
+        }
+      }
+      editDeco(doc, el, id, opts);
+    }
+    tick(stage);
+  }
+  function editDeco(doc, el, id, opts) {
+    el.querySelectorAll(':scope>.kf-tag,:scope>.kf-rs').forEach(x => x.remove());
+    if (!opts.edit) return;
+    const tag = doc.createElement('div'); tag.className = 'kf-tag'; tag.textContent = BOX_LABEL[id];
+    const rs = doc.createElement('div'); rs.className = 'kf-rs';
+    el.append(tag, rs);
+  }
+  function isEmpty(id, d) {
+    if (!d) return true;
+    if (id === 'fol') return !(d.rows && d.rows.some(r => r && r.n != null));
+    if (id === 'crank' || id === 'qrank') return !(d.rows && d.rows.length);
+    if (id === 'quiz') return !d.state || d.state === 'idle';
+    if (id === 'board') return !(d.strokes && d.strokes.length) && !d.live;
+    if (id === 'cnt') return !d.n;
+    return false;
+  }
+
+  /** タイマーと締め切りの残り秒数だけを書き換える(100msごとに呼ぶ) */
+  function tick(stage, boxes) {
+    const now = Date.now();
+    stage.querySelectorAll('.kf-box[data-id=tmr] [data-tmr]').forEach(x => {
+      const d = stage._kfTmr; if (!d) return;
+      const t = fmtTime(tmrValue(d, now), d);
+      if (x.textContent !== t) x.textContent = t;
+    });
+    stage.querySelectorAll('[data-qdl]').forEach(x => {
+      const left = Math.max(0, Math.ceil((Number(x.dataset.qdl) - now) / 1000));
+      const t = `のこり ${left} 秒`;
+      if (x.textContent !== t) x.textContent = t;
+    });
+  }
+  /** render の前に、タイマーのデータをステージに覚えさせる */
+  function renderAll(stage, boxes, opts) {
+    const t = boxes.tmr && boxes.tmr.d;
+    stage._kfTmr = t || SAMPLE.tmr;
+    render(stage, boxes, opts);
+  }
+
+  root.KFR = { BOX_IDS, BOX_LABEL, SHAPES, CSS, render: renderAll, tick, hexA, fmtTime, tmrValue, drawStroke, drawBoard, boardBg };
+})(typeof window !== 'undefined' ? window : globalThis);
