@@ -1,4 +1,4 @@
-/* Kaki Frost 表示(補助exe) v1.0.4
+/* Kaki Frost 表示(補助exe) v1.0.5
  * Kaki Frost Web から表示のデータ(タイマー・フォロワー・早押し・ボードなど)を受け取り(127.0.0.1 の WebSocket)、
  * 自分の画面に「枠なし・透明・最前面・クリックが通り抜ける」窓で表示する。
  */
@@ -11,6 +11,8 @@ const { WebSocketServer } = require('ws');
 const VERSION = app.getVersion();
 const SHORTCUT = 'Control+Alt+K';
 const PROTOCOL = 'kakifrost';   // Kaki Frost Web から kakifrost://start で起動できるようにする
+/** exe の本当の場所(portable 版は一時フォルダに展開して動くので、元の exe の場所を使う) */
+const EXE_PATH = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
 
 /**
  * 自分の保存場所を Windows に登録する(HKEY_CURRENT_USER なので管理者の許可はいらない)。
@@ -20,7 +22,7 @@ const PROTOCOL = 'kakifrost';   // Kaki Frost Web から kakifrost://start で�
 function registerProtocol() {
   try {
     if (process.defaultApp) app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1] || '.')]);
-    else app.setAsDefaultProtocolClient(PROTOCOL, process.env.PORTABLE_EXECUTABLE_FILE || process.execPath, []);
+    else app.setAsDefaultProtocolClient(PROTOCOL, EXE_PATH, []);
   } catch (e) { console.error(e); }
 }
 const fromLink = argv => (argv || []).some(a => String(a).toLowerCase().startsWith(PROTOCOL + ':'));
@@ -103,6 +105,7 @@ function buildMenu() {
     { label: `Kaki Frost 表示 v${VERSION}`, enabled: false },
     { label: clients ? `🟢 アプリと接続中(${clients})` : `⚪ アプリを待っています(ポート ${cfg.port})`, enabled: false },
     { type: 'separator' },
+    { label: 'Windows の起動時に起動する', type: 'checkbox', checked: loginItem(), click: m => setLoginItem(m.checked) },
     { label: '表示する', type: 'checkbox', checked: cfg.visible !== false, click: m => setVisible(m.checked) },
     { label: `位置とサイズを調整する(${'Ctrl+Alt+K'})`, type: 'checkbox', checked: editing, click: m => setEditing(m.checked) },
     { label: '画面いっぱいに戻す', click: resetBounds },
@@ -128,7 +131,7 @@ function startServer() {
   });
   wss.on('connection', ws => {
     clients++; sendState(); buildMenu();
-    ws.send(JSON.stringify({ app: 'kakifrost-exe', version: VERSION }));
+    ws.send(JSON.stringify({ app: 'kakifrost-exe', version: VERSION, path: EXE_PATH }));   // 保存場所をアプリに伝える(表示用)
     if (lastPayload && win) win.webContents.send('payload', lastPayload);
     ws.on('message', raw => {
       let d; try { d = JSON.parse(String(raw)); } catch (e) { return; }
@@ -148,6 +151,10 @@ function startServer() {
     } else console.error(e);
   });
 }
+
+/** Windows の起動時に起動する(スタートアップ) */
+function loginItem() { try { return app.getLoginItemSettings({ path: EXE_PATH }).openAtLogin; } catch (e) { return false; } }
+function setLoginItem(on) { try { app.setLoginItemSettings({ openAtLogin: !!on, path: EXE_PATH }); } catch (e) {} buildMenu(); }
 
 // ---------- 起動 ----------
 if (!app.requestSingleInstanceLock()) { app.quit(); }
